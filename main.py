@@ -16,7 +16,7 @@ app = FastAPI(title="Call Center Analytics API")
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=["http://localhost:5173"],  # In production, specify your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,9 +24,6 @@ app.add_middleware(
 
 # Database setup
 DB_PATH = Path("call_center.db")
-
-
-
 
 def init_database():
     """Initialize SQLite database"""
@@ -102,8 +99,8 @@ class KPIResponse(BaseModel):
 
 # Helper Functions
 def clean_column_name(col: str) -> str:
-    """Convert column names to database format"""
-    return col.lower().replace(' ', '_').replace('/', '_')
+    """Convert column names to database format""" 
+    return col.lower().replace(' ', '_').replace('/', '_') 
 
 def load_data_from_db(filters: FilterParams = None) -> pd.DataFrame:
     """Load data from SQLite database with optional filters"""
@@ -385,12 +382,19 @@ async def upload_csv(file: UploadFile = File(...)):
         contents = await file.read()
         df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
         
-        # Clean column names
+        # clean the column names
         df.columns = [clean_column_name(col) for col in df.columns]
+
+        # filling the null vaues there in agentname  column and batch column
         
-        # Add upload timestamp
+        df['agent_name'] = df['agent_name'].fillna('Unknown')
+        df['batch'] = df['batch'].fillna('Unknown')
+        # Clean column names
+        print("*0"*20)
+        print(f"Uploaded columns: {df.columns.tolist()}")
+        # Add upload timestamps
         df['upload_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         # Save to database
         conn = sqlite3.connect(DB_PATH)
         df.to_sql('call_data', conn, if_exists='replace', index=False)
@@ -399,11 +403,14 @@ async def upload_csv(file: UploadFile = File(...)):
         return {
             "success": True,
             "message": f"Successfully uploaded {len(df)} records",
-            "records": len(df)
+            "records": len(df),
+            "data":df.to_dict(orient='records'),
+            "headers":df.columns.tolist()
         }
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
 
 @app.post("/api/analytics/kpis")
 async def get_kpis(filters: FilterParams, service_level_threshold: int = 20):
