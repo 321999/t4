@@ -220,7 +220,7 @@ def dashboard_stats(session_id: str):
     .fillna(0)
     .to_dict(orient="records")
 )
-
+    print("yaha pe agent perofrmance khatam hi "*5)
 
     # ---------- DISPOSITIONS ----------
     # dispositions = (
@@ -248,9 +248,10 @@ def dashboard_stats(session_id: str):
     .to_dict(orient="records")
 )
 
-    # ---------- DAILY TREND ----------
+    print("yaha pe disposition khatam hi "*5)
+#     # ---------- DAILY TREND ----------
     dailyTrend = (
-    df.assign(
+        df.assign(
         date=df["call_start_time"].dt.date,
         is_answered=df["connectstatus"]
         .str.strip()
@@ -263,10 +264,29 @@ def dashboard_stats(session_id: str):
         answeredCalls=("is_answered", "sum"),
     )
     .reset_index()
-)
+    )
 
-    dailyTrend["answerRate"] = (dailyTrend["answeredCalls"] / dailyTrend["totalCalls"] * 100).round(1)
+    dailyTrend["totalCalls"] = dailyTrend["totalCalls"].astype(int)
+    dailyTrend["answeredCalls"] = dailyTrend["answeredCalls"].astype(int)
 
+    dailyTrend["answerRate"] = (
+    dailyTrend["answeredCalls"] / dailyTrend["totalCalls"] * 100
+    ).round(1).astype(float)
+
+    dailyTrend["date"] = dailyTrend["date"].astype(str)
+
+    dailyTrend = dailyTrend.to_dict(orient="records")
+    
+    print("dailyTrend"*10)
+    for i in dailyTrend:
+        print(i)
+    service_df = df["service"].value_counts().reset_index()
+    service_df.columns=["name","value"]
+    service_df["value"] = service_df["value"].astype(int)  # convert to Python int
+    service_df = service_df.to_dict(orient="records")
+    print("service df"*10)
+    print(service_df)
+    # print)
     # dailyTrend = (
     #     df.assign(date=df["call_start_time"].dt.date)
     #     .groupby("date")
@@ -274,14 +294,105 @@ def dashboard_stats(session_id: str):
     #     .reset_index(name="calls")
     #     .to_dict(orient="records")
     # )
-    print("agent performance"*100)
+    print("#######"*10)
+    # To create the heatmap 
+    # ---------- EXTRACT DATE & HOUR ----------
+    df["date"] = df["call_start_time"].dt.strftime("%d-%m")
+    df["hour"] = df["call_start_time"].dt.hour.astype(str).str.zfill(2)
+    grouped = (
+        df.groupby(["date", "hour"])
+        .size()
+        .reset_index(name="count")
+    )
+
+    # ---------- ENSURE ALL HOURS (00–23) ----------
+    unique_dates = sorted(df["date"].unique())
+    all_hours = [str(h).zfill(2) for h in range(24)]
+
+    full_index = pd.MultiIndex.from_product(
+        [unique_dates, all_hours],
+        names=["date", "hour"]
+    )
+    grouped = (
+        grouped
+        .set_index(["date", "hour"])
+        .reindex(full_index, fill_value=0)
+        .reset_index()
+    )
+    # ---------- FINAL FORMAT ----------
+    grouped["hour"] = grouped["hour"] + ":00"
+    grouped["count"] = grouped["count"].astype(int)
+    grouped=grouped.to_dict(orient="records")
+    print(grouped)
     # print("agentPerformance", agentPerformance)
     return {
         "kpis": kpis,
         "agentPerformance": agentPerformance,
         "dispositions": dispositions,
         "dailyTrend": dailyTrend,
+        "Services":service_df
+        ,"grouped":grouped
     }
+
+# per day ke bases pe hour wise kitna connect hua hi and kitna not connected hi 
+# so that i can ha
+@app.get("/api/daily-hourly-connect-status")
+def daily_hourly_connect_status(session_id: str):
+    print("-------------------------------0"*5)
+    if session_id not in SESSIONS:
+        raise HTTPException(status_code=404, detail="Invalid session")
+
+    df = SESSIONS[session_id].copy()
+    # --------------------------------
+    # DATE & HOUR EXTRACTION
+    # --------------------------------
+    df["date"] = df["call_start_time"].dt.strftime("%d-%m")
+    df["hour"] = df["call_start_time"].dt.strftime("%H:00")
+
+    # --------------------------------
+    # CONNECTED FLAG (NO is_answered COLUMN)
+    # --------------------------------
+    df["is_connected"] = (
+        df["connectstatus"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .isin(["connected", "answered"])
+    )
+
+    # --------------------------------
+    # GROUP BY DATE + HOUR
+    # --------------------------------
+    hourly = (
+        df.groupby(["date", "hour"])
+        .agg(
+            total=("connectstatus", "count"),
+            connected=("is_connected", "sum")
+        )
+        .reset_index()
+    )
+
+    # --------------------------------
+    # DERIVED METRIC
+    # --------------------------------
+    hourly["notConnected"] = hourly["total"] - hourly["connected"]
+
+    # --------------------------------
+    # TYPE SAFETY (JSON SERIALIZATION FIX)
+    # --------------------------------
+    hourly["total"] = hourly["total"].astype(int)
+    hourly["connected"] = hourly["connected"].astype(int)
+    hourly["notConnected"] = hourly["notConnected"].astype(int)
+
+    # --------------------------------
+    # SORT FOR CHARTS
+    # --------------------------------
+    hourly = hourly.sort_values(["date", "hour"])
+    hourly=hourly.to_dict(orient="records")
+    print(hourly)
+
+    return hourly 
+
 
 
 """
