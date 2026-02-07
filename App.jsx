@@ -83,6 +83,9 @@ const CallCenterDashboard = () => {
   const [sessionId, setSessionId] = useState(null);
   const [stats, setStats] = useState(null);
 
+  const [hourlyConnectData, setHourlyConnectData] = useState([]);
+
+
 
 
   // const data = useMemo(() => uploadedData || generateDummyData(), [uploadedData]);
@@ -174,11 +177,28 @@ const CallCenterDashboard = () => {
       .then(setStats);
   }, [sessionId]);
 
+
+  // for hourly coonected hor not 
+  useEffect(() => {
+    if (!sessionId) return;
+  fetch(`http://localhost:8000/api/daily-hourly-connect-status?session_id=${sessionId}`)
+    .then(res => res.json())
+    .then(data => setHourlyConnectData(data))
+    .catch(err => console.error(err));
+}, [sessionId]);
+
+
+if (hourlyConnectData){
+  console.log("hourly connected data");
+  console.log( hourlyConnectData.hourly );
+}
+
   // {console.log("Stats:", stats)}
   if (stats) {
     console.log("ye kpis ka " + stats.kpis);
     console.log(JSON.stringify(stats.agentPerformance, null, 2));
     console.log("ye displosition ka " + JSON.stringify(stats.dispositions, null, 2));
+    console.log("services\n"+ JSON.stringify(stats.Services));
   }
 
 
@@ -283,34 +303,34 @@ const totalDispositionCount = stats?.dispositions?.reduce(
   // }, [data]);
 
   // Hourly Call Volume Heatmap Data
-  // const heatmapData = useMemo(() => {
-  //   const heatMap = {};
-  //   data.forEach(call => {
-  //     const date = call.Date || 'Unknown';
-  //     const hour = call.Interval ? call.Interval.split('-')[0].split(':')[0] : '00';
-  //     const key = `${date}_${hour}`;
-  //     heatMap[key] = (heatMap[key] || 0) + 1;
-  //   });
+  const heatmapData = useMemo(() => {
+    const heatMap = {};
+    data.forEach(call => {
+      const date = call.Date || 'Unknown';
+      const hour = call.Interval ? call.Interval.split('-')[0].split(':')[0] : '00';
+      const key = `${date}_${hour}`;
+      heatMap[key] = (heatMap[key] || 0) + 1;
+    });
 
-  //   const uniqueDates = [...new Set(data.map(d => d.Date))].sort();
-  //   const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
+    const uniqueDates = [...new Set(data.map(d => d.Date))].sort();
+    const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2, '0'));
 
-  //   const heatmapArray = [];
-  //   uniqueDates.forEach(date => {
-  //     hours.forEach(hour => {
-  //       const key = `${date}_${hour}`;
-  //       heatmapArray.push({
-  //         date: date.slice(5),
-  //         hour: `${hour}:00`,
-  //         count: heatMap[key] || 0
-  //       });
-  //     });
-  //   });
+    const heatmapArray = [];
+    uniqueDates.forEach(date => {
+      hours.forEach(hour => {
+        const key = `${date}_${hour}`;
+        heatmapArray.push({
+          date: date.slice(5),
+          hour: `${hour}:00`,
+          count: heatMap[key] || 0
+        });
+      });
+    });
 
-  //   return heatmapArray;
-  // }, [data]);
+    return heatmapArray;
+  }, [data]);
 
-  // Top Services/Campaigns
+  // // Top Services/Campaigns
   // const topServices = useMemo(() => {
   //   const serviceMap = {};
   //   data.forEach(call => {
@@ -666,24 +686,24 @@ const totalDispositionCount = stats?.dispositions?.reduce(
                 </div>
               </div>
             </div>
-
+                        
             {/* Top Services/Campaigns */}
-            {/* <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="bg-white p-6 rounded-lg shadow-md">
               <h3 className="text-xl font-bold mb-4">🏆 Top Campaigns/Services</h3>
               <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={topServices} layout="vertical">
+                <BarChart data={stats?.Services ?? []} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="name" type="category" width={100} />
                   <Tooltip />
                   <Bar dataKey="value" fill="#0088FE">
-                    {topServices.map((entry, index) => (
+                    {stats && stats.Services.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div> */}
+            </div>
 
 
             {/* Dialer Type Comparison */}
@@ -854,18 +874,54 @@ const totalDispositionCount = stats?.dispositions?.reduce(
         )}
 
         {/* TRENDS TAB */}
+        {activeTab === 'trends' && (
+  <div className="space-y-6">
+    <div className="bg-white p-6 rounded-lg shadow-md">
+      <h3 className="text-xl font-bold mb-4">Daily Call Trends</h3>
+
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={hourlyConnectData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="hour" />
+          <YAxis />
+          <Tooltip />
+          <Legend />
+
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke="#0088FE"
+            strokeWidth={2}
+            name="Total Calls"
+          />
+
+          <Line
+            type="monotone"
+            dataKey="connected"
+            stroke="#00C49F"
+            strokeWidth={2}
+            name="Connected Calls"
+          />
+
+          <Line
+            type="monotone"
+            dataKey="notConnected"
+            stroke="#FF8042"
+            strokeWidth={2}
+            name="Not Connected"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+)}
+
         {/* {activeTab === 'trends' && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow-md">
               <h3 className="text-xl font-bold mb-4">Daily Call Trends</h3>
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={Object.values(data.reduce((acc, call) => {
-                  const date = call.Date;
-                  if (!acc[date]) acc[date] = { date: date.slice(5), total: 0, answered: 0 };
-                  acc[date].total++;
-                  if (call.Call_Status?.includes('ANSWER')) acc[date].answered++;
-                  return acc;
-                }, {})).sort((a, b) => a.date.localeCompare(b.date))}>
+                <LineChart data={hourlyConnectData && hourlyConnectData.hourly}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
